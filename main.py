@@ -203,59 +203,57 @@ def auto_reset_midnight_loop():
 threading.Thread(target=auto_reset_midnight_loop, daemon=True).start()
 
 # 🚨 [NEW GLOBAL DICTIONARY] हर ग्रुप के लिए वार्निंग टाइमस्टैम्प याद रखने के लिए
-# 🔄 हर ग्रुप के लिए कस्टमाइज्ड पोल शेड्यूलर लूप
 def global_poll_manager():
     while True:
         try:
             with sqlite3.connect(DB_FILE, timeout=20) as conn:
                 cursor = conn.cursor()
-                # 🔍 SELECT क्वेरी में 'last_warning_time' कॉलम को भी जोड़ दिया है
                 cursor.execute("SELECT chat_id, current_index, last_poll_id, last_sent_time, language, interval, auto_delete, last_warning_time FROM groups")
                 all_groups = cursor.fetchall()
                 current_now = time.time()
 
-                # 💡 लूप के वेरिएबल्स में 'last_warning_time' को भी पास किया है
                 for chat_id, current_index, last_poll_id, last_sent_time, language, interval, auto_delete, last_warning_time in all_groups:
                     if current_now - last_sent_time >= interval:
                         
-                        # चेक करें कि क्या बॉट अभी भी ग्रुप में एडमिन है?
+                        # 🔍 Bot Admin Check
                         is_bot_admin = False
+                        admin_check_error = None
                         try:
                             bot_member = bot.get_chat_member(chat_id, bot.get_me().id)
                             if bot_member.status in ['administrator', 'creator']:
                                 is_bot_admin = True
-                        except Exception:
+                            else:
+                                admin_check_error = f"Bot status: {bot_member.status}"
+                        except Exception as e:
+                            admin_check_error = str(e)
                             is_bot_admin = False
 
-                        # ⚠️ अगर बॉट एडमिन नहीं है
                         if not is_bot_admin:
-                            # ⏱️ 12 घंटे = 43200 सेकंड्स (फिक्स टाइमर)
-                            warning_interval = 43200 
+                            print(f"⚠️ [GROUP {chat_id}] Bot is NOT admin. Error: {admin_check_error}")
                             
-                            # 🎯 अब मेमोरी से नहीं, सीधे डेटाबेस के रिकॉर्ड (last_warning_time) से चेक होगा
+                            warning_interval = 43200  # 12 hours
                             if last_warning_time is None or current_now - last_warning_time >= warning_interval:
                                 try:
                                     bot.send_message(
                                         chat_id=chat_id, 
-                                        text="⚠️ **alert!**\n\nTo send polls in this group, you must re-promote the bot to Admin **(Administrator)** and grant permissions।",
+                                        text="⚠️ **ALERT!**\n\nTo send polls, please re-promote me to Admin and grant permissions.",
                                         parse_mode="Markdown"
                                     )
-                                    # 💾 डेटाबेस में वार्निंग भेजने का टाइम तुरंत सेव करें (रीस्टार्ट प्रूफ)
                                     cursor.execute("UPDATE groups SET last_warning_time = ? WHERE chat_id = ?", (current_now, chat_id))
-                                except Exception:
-                                    pass
+                                except Exception as warn_err:
+                                    print(f"⚠️ [GROUP {chat_id}] Warning send failed: {warn_err}")
                             
-                            # बार-बार डेटाबेस लूप को एक्टिवेट न करने के लिए last_sent_time को नॉर्मल इंटरवल तक बढ़ाएं
+                            # ❌ Skip poll sending, but update timer
                             cursor.execute("UPDATE groups SET last_sent_time = ? WHERE chat_id = ?", (current_now, chat_id))
                             conn.commit()
-                            continue  # इस ग्रुप को स्किप करें
+                            continue
 
-                        # --- पुराना पोल डिलीट करने का लॉजिक (एडमिन होने पर ही चलेगा) ---
+                        # --- Delete old poll ---
                         if last_poll_id is not None and auto_delete == 1:
                             try:
                                 bot.delete_message(chat_id=chat_id, message_id=last_poll_id)
-                            except Exception:
-                                pass
+                            except Exception as del_err:
+                                print(f"❌ [GROUP {chat_id}] Old poll delete failed: {del_err}")
 
                         filtered_quiz = [q for q in QUIZ_LIST if q.get("lang", "hindi") == language]
                         if not filtered_quiz:
@@ -290,15 +288,25 @@ def global_poll_manager():
                                 WHERE chat_id = ?
                             ''', (new_index, new_poll_id, current_now, chat_id))
                             conn.commit()
+                            print(f"✅ [GROUP {chat_id}] Poll sent successfully")
 
                         except Exception as e:
-                            if "bot was kicked" in str(e).lower() or "chat not found" in str(e).lower():
+                            error_str = str(e).lower()
+                            print(f"❌ [GROUP {chat_id}] Poll send failed: {e}")
+                            
+                            # Check if bot left group
+                            if "bot was kicked" in error_str or "chat not found" in error_str or "bot is not a member" in error_str:
                                 cursor.execute("DELETE FROM groups WHERE chat_id = ?", (chat_id,))
                                 conn.commit()
+                                print(f"🗑️ [GROUP {chat_id}] Removed from database (bot kicked/left)")
+                            else:
+                                # For permission errors, still try again next time
+                                cursor.execute("UPDATE groups SET last_sent_time = ? WHERE chat_id = ?", (current_now, chat_id))
+                                conn.commit()
+                                
         except Exception as db_err:
-            print(f"डेटाबेस लूप एरर: {db_err}")
+            print(f"❌ Database loop error: {db_err}")
         time.sleep(5)
-        
 
 # ⚙️ मुख्य सेटिंग्स मेनू यूआई जेनरेटर
 def get_settings_markup(chat_id):
