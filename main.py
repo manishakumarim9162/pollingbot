@@ -112,6 +112,11 @@ def init_db():
         except sqlite3.OperationalError:
             pass
 
+        # 🔍 [ERROR COUNT DB] groups टेबल में error_count कॉलम जोड़ना (सुरक्षित तरीका)
+        try:
+            cursor.execute("ALTER TABLE groups ADD COLUMN error_count INTEGER DEFAULT 0")
+        except sqlite3.OperationalError:
+            pass
         # 🔍 [ANTI-SPAM SETTINGS DB] पुराना सेटिंग्स कॉलम लॉजिक
         try:
             cursor.execute("ALTER TABLE groups ADD COLUMN settings_msg_id INTEGER DEFAULT 0")
