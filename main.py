@@ -216,8 +216,12 @@ session.mount('https://', adapter)
 bot.threaded_request_adapter = session 
 
 def execute_with_retry(func, *args, timeout=15, **kwargs):
-    if 'timeout' not in kwargs:
+    # get_chat_member को timeout support नहीं है, बाकी methods को दो
+    func_name = func.__name__ if hasattr(func, '__name__') else str(func)
+    
+    if func_name != 'get_chat_member' and 'timeout' not in kwargs:
         kwargs['timeout'] = timeout
+    
     try:
         return func(*args, **kwargs)
     except Exception as e:
@@ -225,7 +229,7 @@ def execute_with_retry(func, *args, timeout=15, **kwargs):
         if "kicked" in err_msg or "chat not found" in err_msg or "not a member" in err_msg:
             raise e
         raise ConnectionError(f"Network issue: {e}")
-
+        
 def global_poll_manager():
     try:
         BOT_ID = bot.get_me().id
