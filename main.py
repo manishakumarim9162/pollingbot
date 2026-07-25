@@ -378,8 +378,8 @@ def global_poll_manager():
                                 conn.commit()
                                 
         except ConnectionError as net_error:
-            print(f"🚨 नेटवर्क एरर आया: {net_error}")
-            print("💤 बॉट अब 10 मिनट (600 सेकंड) के लिए रुक रहा है...")
+            print(f"🚨 network error: {net_error}")
+            print("Bot stop to 10 min (600 second)...")
             time.sleep(600)
             
         except Exception as db_err:
