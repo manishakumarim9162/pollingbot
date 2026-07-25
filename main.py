@@ -739,7 +739,7 @@ def manual_leaderboard_sender(message):
         except Exception: pass
         return
         
-    status_msg = bot.send_message(message.chat.id, "⏳ **Sending new result to all groups immediately...**")
+    status_msg = bot.send_message(message.chat.id, "⏳ *Sending new result to all groups immediately...*")
     IST = pytz.timezone('Asia/Kolkata')
     now = datetime.now(IST)
     
