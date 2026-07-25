@@ -1,6 +1,8 @@
 import os
 import time
 import sqlite3
+import requests
+from requests.adapters import HTTPAdapter
 import threading
 import logging
 from datetime import datetime
@@ -203,55 +205,112 @@ def auto_reset_midnight_loop():
 threading.Thread(target=auto_reset_midnight_loop, daemon=True).start()
 
 # 🚨 [NEW GLOBAL DICTIONARY] हर ग्रुप के लिए वार्निंग टाइमस्टैम्प याद रखने के लिए
+session = requests.Session()
+adapter = HTTPAdapter(pool_connections=10, pool_maxsize=50)
+session.mount('https://', adapter)
+bot.threaded_request_adapter = session 
+
+def execute_with_retry(func, *args, timeout=15, **kwargs):
+    if 'timeout' not in kwargs:
+        kwargs['timeout'] = timeout
+    try:
+        return func(*args, **kwargs)
+    except Exception as e:
+        err_msg = str(e).lower()
+        if "kicked" in err_msg or "chat not found" in err_msg or "not a member" in err_msg:
+            raise e
+        raise ConnectionError(f"Network issue: {e}")
+
 def global_poll_manager():
+    try:
+        BOT_ID = bot.get_me().id
+    except Exception as e:
+        print(f"⚠️ Initial bot.get_me() failed: {e}. Retrying in 10 seconds...")
+        time.sleep(10)
+        return global_poll_manager()
+
     while True:
         try:
             with sqlite3.connect(DB_FILE, timeout=20) as conn:
                 cursor = conn.cursor()
-                cursor.execute("SELECT chat_id, current_index, last_poll_id, last_sent_time, language, interval, auto_delete, last_warning_time FROM groups")
+                # 🆕 SELECT में error_count को भी शामिल किया गया है
+                cursor.execute("SELECT chat_id, current_index, last_poll_id, last_sent_time, language, interval, auto_delete, last_warning_time, error_count FROM groups")
                 all_groups = cursor.fetchall()
                 current_now = time.time()
 
-                for chat_id, current_index, last_poll_id, last_sent_time, language, interval, auto_delete, last_warning_time in all_groups:
-                    if current_now - last_sent_time >= interval:
-                        
-                        # 🔍 Bot Admin Check
+                for chat_id, current_index, last_poll_id, last_sent_time, language, interval, auto_delete, last_warning_time, error_count in all_groups:
+                    
+                    # 🔍 1. Admin Check हमेशा होगा (भले ही पोल भेजने का समय हुआ हो या नहीं, ताकि स्टेटस अपडेट रहे)
+                    is_bot_admin = False
+                    admin_check_error = None
+                    try:
+                        bot_member = execute_with_retry(bot.get_chat_member, chat_id, BOT_ID, timeout=15)
+                        if bot_member.status in ['administrator', 'creator']:
+                            is_bot_admin = True
+                            # अगर एडमिन बना दिया गया है, तो एरर काउंट वापस 0 कर दें
+                            if error_count > 0:
+                                cursor.execute("UPDATE groups SET error_count = 0 WHERE chat_id = ?", (0, chat_id))
+                                conn.commit()
+                                error_count = 0
+                        else:
+                            admin_check_error = f"Bot status: {bot_member.status}"
+                    except ConnectionError as net_err:
+                        raise net_err  # नेटवर्क एरर आने पर सीधे 10 मिनट वाले ब्रेक पर जाएगा
+                    except Exception as e:
+                        admin_check_error = str(e)
                         is_bot_admin = False
-                        admin_check_error = None
-                        try:
-                            bot_member = bot.get_chat_member(chat_id, bot.get_me().id)
-                            if bot_member.status in ['administrator', 'creator']:
-                                is_bot_admin = True
-                            else:
-                                admin_check_error = f"Bot status: {bot_member.status}"
-                        except Exception as e:
-                            admin_check_error = str(e)
-                            is_bot_admin = False
 
-                        if not is_bot_admin:
-                            print(f"⚠️ [GROUP {chat_id}] Bot is NOT admin. Error: {admin_check_error}")
-                            
-                            warning_interval = 43200  # 12 hours
-                            if last_warning_time is None or current_now - last_warning_time >= warning_interval:
-                                try:
-                                    bot.send_message(
-                                        chat_id=chat_id, 
-                                        text="⚠️ **ALERT!**\n\nTo send polls, please re-promote me to Admin and grant permissions.",
-                                        parse_mode="Markdown"
-                                    )
-                                    cursor.execute("UPDATE groups SET last_warning_time = ? WHERE chat_id = ?", (current_now, chat_id))
-                                except Exception as warn_err:
-                                    print(f"⚠️ [GROUP {chat_id}] Warning send failed: {warn_err}")
-                            
-                            # ❌ Skip poll sending, but update timer
-                            cursor.execute("UPDATE groups SET last_sent_time = ? WHERE chat_id = ?", (current_now, chat_id))
+                    # ⚠️ 2. अगर बॉट एडमिन नहीं है
+                    if not is_bot_admin:
+                        error_str = admin_check_error.lower() if admin_check_error else ""
+                        
+                        # अगर ग्रुप से निकाल दिया गया है तो सीधे डिलीट करें
+                        if "kicked" in error_str or "chat not found" in error_str or "not a member" in error_str:
+                            cursor.execute("DELETE FROM groups WHERE chat_id = ?", (chat_id,))
                             conn.commit()
+                            print(f"🗑️ [GROUP {chat_id}] Removed from database (Bot left/kicked)")
                             continue
 
+                        # एडमिन न होने पर एरर काउंट +1 बढ़ाएं
+                        new_error_count = error_count + 1
+                        cursor.execute("UPDATE groups SET error_count = ? WHERE chat_id = ?", (new_error_count, chat_id))
+                        conn.commit()
+
+                        print(f"⚠️ [GROUP {chat_id}] Bot is NOT admin. Error Count: {new_error_count}/4. Reason: {admin_check_error}")
+
+                        # 🚨 लगातार 4 बार एरर होने पर और 6 घंटे (21600 सेकंड) बीत जाने पर ही वार्निंग भेजें
+                        warning_interval = 21600  # 6 Hours
+                        if new_error_count >= 4:
+                            if last_warning_time is None or current_now - last_warning_time >= warning_interval:
+                                try:
+                                    execute_with_retry(
+                                        bot.send_message,
+                                        chat_id=chat_id, 
+                                        text="⚠️ **ALERT!**\n\nI have failed to send polls 4+ times because I am NOT an Admin. Please promote me to Admin and grant permissions.",
+                                        parse_mode="Markdown",
+                                        timeout=15
+                                    )
+                                    # वार्निंग टाइम अपडेट करें
+                                    cursor.execute("UPDATE groups SET last_warning_time = ? WHERE chat_id = ?", (current_now, chat_id))
+                                    conn.commit()
+                                    print(f"📢 [GROUP {chat_id}] 6-Hour Interval Warning Sent.")
+                                except ConnectionError as net_err:
+                                    raise net_err
+                                except Exception as warn_err:
+                                    print(f"⚠️ [GROUP {chat_id}] Warning send failed: {warn_err}")
+                        
+                        # एडमिन न होने पर आगे का पोल सेंडिंग कोड स्किप करें
+                        continue
+
+                    # 🕒 3. पोल भेजने का समय चेक करें (सिर्फ एडमिन होने पर ही यहाँ पहुँचेगा)
+                    if current_now - last_sent_time >= interval:
+                        
                         # --- Delete old poll ---
                         if last_poll_id is not None and auto_delete == 1:
                             try:
-                                bot.delete_message(chat_id=chat_id, message_id=last_poll_id)
+                                execute_with_retry(bot.delete_message, chat_id=chat_id, message_id=last_poll_id, timeout=15)
+                            except ConnectionError as net_err:
+                                raise net_err
                             except Exception as del_err:
                                 print(f"❌ [GROUP {chat_id}] Old poll delete failed: {del_err}")
 
@@ -265,15 +324,18 @@ def global_poll_manager():
                         quiz = filtered_quiz[current_index]
                         explanation_text = quiz.get("explanation", None)
                         
+                        # --- Send New Poll ---
                         try:
-                            sent_message = bot.send_poll(
+                            sent_message = execute_with_retry(
+                                bot.send_poll,
                                 chat_id=chat_id,
                                 question=quiz["question"],
                                 options=quiz["options"],
                                 type="quiz",
                                 correct_option_id=quiz["correct_id"],
                                 is_anonymous=False,  
-                                explanation=explanation_text
+                                explanation=explanation_text,
+                                timeout=20
                             )
                             new_poll_id = sent_message.message_id
                             poll_api_id = sent_message.poll.id
@@ -282,30 +344,39 @@ def global_poll_manager():
                                            (poll_api_id, chat_id, quiz["correct_id"], time.time()))
 
                             new_index = (current_index + 1) % len(filtered_quiz)
+                            
+                            # सफल होने पर एरर काउंट को वापस 0 सेट करें
                             cursor.execute('''
                                 UPDATE groups 
-                                SET current_index = ?, last_poll_id = ?, last_sent_time = ? 
+                                SET current_index = ?, last_poll_id = ?, last_sent_time = ?, error_count = 0 
                                 WHERE chat_id = ?
                             ''', (new_index, new_poll_id, current_now, chat_id))
                             conn.commit()
                             print(f"✅ [GROUP {chat_id}] Poll sent successfully")
 
+                        except ConnectionError as net_err:
+                            raise net_err
                         except Exception as e:
                             error_str = str(e).lower()
                             print(f"❌ [GROUP {chat_id}] Poll send failed: {e}")
                             
-                            # Check if bot left group
                             if "bot was kicked" in error_str or "chat not found" in error_str or "bot is not a member" in error_str:
                                 cursor.execute("DELETE FROM groups WHERE chat_id = ?", (chat_id,))
                                 conn.commit()
-                                print(f"🗑️ [GROUP {chat_id}] Removed from database (bot kicked/left)")
                             else:
-                                # For permission errors, still try again next time
-                                cursor.execute("UPDATE groups SET last_sent_time = ? WHERE chat_id = ?", (current_now, chat_id))
+                                # सामान्य फेलियर पर भी एरर काउंट बढ़ाएं
+                                cursor.execute("UPDATE groups SET last_sent_time = ?, error_count = error_count + 1 WHERE chat_id = ?", (current_now, chat_id))
                                 conn.commit()
                                 
+        except ConnectionError as net_error:
+            print(f"🚨 नेटवर्क एरर आया: {net_error}")
+            print("💤 बॉट अब 10 मिनट (600 सेकंड) के लिए रुक रहा है...")
+            time.sleep(600)
+            
         except Exception as db_err:
             print(f"❌ Database loop error: {db_err}")
+            time.sleep(5)
+            
         time.sleep(5)
 
 # ⚙️ मुख्य सेटिंग्स मेनू यूआई जेनरेटर
