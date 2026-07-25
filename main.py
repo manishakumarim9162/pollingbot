@@ -1696,7 +1696,7 @@ def handle_ban_command(message):
 
     warn_text = (
         f"⏳ <b>बैन काउंटडाउन शुरू हो चुका है!</b>\n\n"
-        f"👤 Hey {mention}, तुमने ओनर सर को नाराज किया है!\n"
+        f"👤 Hey {mention}, तुमने सर को नाराज किया है!\n"
         f"✨ <b>चेतावनी:</b> चाहे तुम ग्रुप के एडमिन ही क्यों न हो, जल्दी से <b>सर को सॉरी बोलो</b> अन्यथा काउंटडाउन समाप्त होते ही मैं तुम्हें डिमोट करके हमेशा के लिए बैन कर दूंगा।\n\n"
         f"⏱️ <b>शेष बचा हुआ समय:</b> 5 मिनट 00 सेकंड"
     )
@@ -1791,7 +1791,7 @@ def handle_cancel_ban(message):
 # =====================================================================
 # 💾 🤖 AUTOMATIC USER TRACKER + DAILY TEXT LIMIT (Bot Admins Included)
 # =====================================================================
-DAILY_MSG_LIMIT = 30  # 👈 Yahan aap apni marzi se limit set kar sakte hain
+DAILY_MSG_LIMIT = 10  # 👈 Yahan aap apni marzi se limit set kar sakte hain
 
 @bot.message_handler(func=lambda message: True, content_types=['text', 'photo', 'video', 'sticker', 'document', 'voice', 'audio', 'animation'])
 def track_save_and_limit_users(message):
