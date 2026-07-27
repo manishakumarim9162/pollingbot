@@ -1905,6 +1905,35 @@ def track_and_save_users(bot_instance, message):
                 conn.commit()
         except Exception as e:
             print(f"Error updating user tracker DB: {e}")
+
+# 📊 Database Statistics Command (Owner only)
+@bot.message_handler(commands=['dbstats'])
+def show_db_stats(message):
+    is_owner = (OWNER_ID and message.from_user.id == OWNER_ID)
+    is_valid_chat = (message.chat.type == 'private' or (SUPPORT_GROUP_ID and message.chat.id == SUPPORT_GROUP_ID))
+
+    if not (is_owner and is_valid_chat):
+        try: bot.send_message(message.chat.id, "❌ Only for bot owner!")
+        except Exception: pass
+        return
+    
+    stats = database_stats(DB_FILE)
+    if stats:
+        text = (
+            f"📊 **Database Statistics:**\n\n"
+            f"👥 Total Groups: **{stats['groups']}**\n"
+            f"👤 Total Users: **{stats['users']}**\n"
+            f"📋 Total Polls: **{stats['polls']}**\n"
+            f"🏆 Total Scores: **{stats['scores']}**\n"
+            f"💾 Total Records: **{stats['total']}**"
+        )
+    else:
+        text = "❌ Error fetching stats"
+    
+    try:
+        bot.send_message(message.chat.id, text, parse_mode="Markdown")
+    except Exception as e:
+        print(f"Error: {e}")
                                 
 # ❤️‍🩹 थ्रेड्स स्टार्ट करें
 threading.Thread(target=global_poll_manager, daemon=True).start()
