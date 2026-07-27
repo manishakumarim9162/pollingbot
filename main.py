@@ -1359,7 +1359,6 @@ def handle_status_pagination(call):
     except Exception as e:
         print(f"पेज बदलने में एरर: {e}")
             
-
 # 🤖 ग्रुप जॉइन/लीव ट्रैकर (सेम वेलकम मैसेज आर्किटेक्चर)
 @bot.my_chat_member_handler()
 def handle_left_or_joined(my_chat_member):
@@ -1426,10 +1425,10 @@ def handle_left_or_joined(my_chat_member):
                         bot.send_message(chat_id=chat_id, text=group_text, reply_markup=group_markup, parse_mode="Markdown")
                     except Exception: pass
                 
-                   elif new_status in ["left", "kicked"]:
+        elif new_status in ["left", "kicked"]:
             # 🗑️ Bot को group से निकलने पर database cleanup करो
             cleanup_group_data(chat_id, DB_FILE)
-
+            
 # =====================================================================
 # 👑 3.5 /promote कमांड हैंडलर (Strict Group ID Check + Warning Alert)
 # =====================================================================
