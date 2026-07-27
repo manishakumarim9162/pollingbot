@@ -1426,10 +1426,9 @@ def handle_left_or_joined(my_chat_member):
                         bot.send_message(chat_id=chat_id, text=group_text, reply_markup=group_markup, parse_mode="Markdown")
                     except Exception: pass
                 
-        elif new_status in ["left", "kicked"]:
-            # Bot ko group se nikalne par data automatically clean ho jayega
-            cursor.execute("DELETE FROM groups WHERE chat_id = ?", (chat_id,))
-            conn.commit()
+                   elif new_status in ["left", "kicked"]:
+            # 🗑️ Bot को group से निकलने पर database cleanup करो
+            cleanup_group_data(chat_id, DB_FILE)
 
 # =====================================================================
 # 👑 3.5 /promote कमांड हैंडलर (Strict Group ID Check + Warning Alert)
