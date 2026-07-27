@@ -1909,6 +1909,14 @@ def track_and_save_users(bot_instance, message):
 # ❤️‍🩹 थ्रेड्स स्टार्ट करें
 threading.Thread(target=global_poll_manager, daemon=True).start()
 threading.Thread(target=daily_leaderboard_scheduler, daemon=True).start()
+# 🔍 Bot Admin Status Checker (4 घंटे के warning interval के साथ)
+from bot_admin_checker import check_bot_admin_status
+
+threading.Thread(
+    target=check_bot_admin_status,
+    args=(bot, DB_FILE),
+    daemon=True
+).start()
 
 print("Successfully 🇮🇳 deployed...🚀")
 
