@@ -8,6 +8,7 @@ import pytz
 import random
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+from bot_cleanup_handler import cleanup_group_data, get_group_storage_size, database_stats
 from dotenv import load_dotenv
 
 # 📚 दूसरी फाइल से प्रश्न इम्पोर्ट करें
