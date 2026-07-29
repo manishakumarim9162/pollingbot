@@ -1172,13 +1172,13 @@ def send_welcome(message):
         except Exception: 
             pass
     
-# 👑 /welcome कमांड - रैंडम फोटो, कस्टमाइज्ड हिंदी टेक्स्ट और हरे बटन के साथ
+# 📳 /welcome कमांड - रैंडम फोटो, कस्टमाइज्ड हिंदी टेक्स्ट और हरे बटन के साथ
 @bot.message_handler(commands=['welcome'])
 def send_owner_welcome(message):
     chat_id = message.chat.id
     user_id = message.from_user.id
 
-    # 🚨 सुरक्षा जांच: केवल ओनर या .env वाली GROUP_ID ही इसे एक्सेस कर सकते हैं
+    # सुरक्षा जांच: केवल ओनर या .env वाली GROUP_ID ही इसे एक्सेस कर सकते हैं
     is_allowed = False
     if user_id == OWNER_ID:
         is_allowed = True
@@ -1201,7 +1201,7 @@ def send_owner_welcome(message):
     except Exception: 
         pass
 
-    # 🖼️ 'images' फोल्डर से रैंडम फोटो चुनने का आपका लॉजिक
+    # 'images' फोल्डर से रैंडम फोटो चुनने का आपका लॉजिक
     image_folder = "images"  
     selected_image_path = None
 
@@ -1218,22 +1218,22 @@ def send_owner_welcome(message):
         "╭────────────────⦿\n"
         "│क्या आपके ग्रुप में सन्नाटा\n"
         "│रहता है? तो अभी ऐड करो\n"
-        "│धांसू ʟɪᴠᴇ Qᴜɪज़ ʙᴏᴛ और \n"
+        "│धांसू ʟɪᴠᴇ Qᴜɪᴢ ʙᴏᴛ और \n"
         "│शुरू करो लाइव मुकाबला!\n"
         "├────────────────⦿\n"
-        "│ʀᴇᴀʟ-ᴛɪᴍᴇ ʟᴇᴀ德ᴇʀʙᴏᴀʀᴅ\n"
+        "│ʀᴇᴀʟ-ᴛɪᴍᴇ ʟᴇᴀᴅᴇʀʙᴏᴀʀᴅ\n"
         "│(ᴛᴏᴘ 20 की रेस)\n"
         "│+2 ᴘᴏɪɴᴛꜱ सही जवाब पर,\n"
-        "│ - 0.5 ᴘᴏɪɴᴛꜱ गलत जवाब पर!\n"
-        "│हर ग्रुप का अपना 'Qᴜɪज़ ᴋɪɴɢ' \n"
+        "│- 0.5 ᴘᴏɪɴᴛꜱ गलत जवाब पर!\n"
+        "│हर ग्रुप का अपना 'Qᴜɪᴢ ᴋɪɴɢ' \n"
         "│👑\n"
         "├────────────────⦿\n"
         "│प्रतिदिन रात 10 बजे\n"
         "│परिणाम घोषित किए जाते हैं\n"
         "│रिजल्ट की प्रतिक्षा नही करने वाले\n"
         "│कभी भी /myscore ᴄᴏᴍᴍᴀɴᴅ\n"
-        "│ से अपना परिणाम चेक\n"
-        "│ कर सकते हैं\n"
+        "│से अपना परिणाम चेक\n"
+        "│कर सकते हैं\n"
         "├────────────────⦿\n"
         "│✨ साथियों आगामी परीक्षाओ जैसे\n"
         "│ʙᴘꜱᴄ ᴘᴇᴛ, ꜱꜱᴄ ɢᴅ,\n"
@@ -1242,7 +1242,7 @@ def send_owner_welcome(message):
         "╰────────────────⦿"
     )
 
-    # 🎨 हरा रंग (Success Style) बटन सेटअप
+    # हरा रंग (Success Style) बटन सेटअप
     markup = InlineKeyboardMarkup()
     add_to_group_url = f"https://t.me/{BOT_USERNAME}?startgroup=true"
     add_button = InlineKeyboardButton(
