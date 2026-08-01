@@ -2073,6 +2073,67 @@ def handle_cancel_ban(message):
                     pass
                 return
 
+@bot.message_handler(commands=['dbstats'])
+def show_db_stats(message):
+    # Debug info for troubleshooting
+    print("dbstats called — from_user:", getattr(message.from_user, 'id', None),
+          "chat_type:", getattr(message.chat, 'type', None),
+          "chat_id:", getattr(message.chat, 'id', None),
+          "OWNER_ID:", OWNER_ID, "SUPPORT_GROUP_ID:", SUPPORT_GROUP_ID)
+
+    # Permissions: only owner, and owner can call from private OR from configured support group
+    if OWNER_ID is None:
+        try:
+            bot.send_message(message.chat.id, "❌ OWNER_ID is not configured in .env — dbstats restricted to owner.")
+        except Exception as e:
+            print("Failed to send OWNER_ID missing message:", e)
+        return
+
+    if message.from_user.id != OWNER_ID:
+        try:
+            bot.send_message(message.chat.id, "❌ This command is only for the bot owner.")
+        except Exception as e:
+            print("Failed to send owner-only message:", e)
+        return
+
+    if not (message.chat.type == 'private' or (SUPPORT_GROUP_ID and message.chat.id == SUPPORT_GROUP_ID)):
+        try:
+            bot.send_message(message.chat.id, "❌ Run this command in a private chat with the bot or from the configured SUPPORT_GROUP_ID.")
+        except Exception as e:
+            print("Failed to send chat-location message:", e)
+        return
+
+    try:
+        stats = database_stats(DB_FILE)
+        print("database_stats returned:", stats)
+    except Exception as e:
+        print("Exception calling database_stats():", e)
+        try:
+            bot.send_message(message.chat.id, f"❌ Exception while fetching DB stats: {e}")
+        except Exception as e2:
+            print("Also failed to send exception message:", e2)
+        return
+
+    if not stats:
+        try:
+            bot.send_message(message.chat.id, "❌ Error fetching stats. Check bot logs for details.")
+        except Exception as e:
+            print("Failed to send 'error fetching stats' message:", e)
+        return
+
+    text = (
+        f"📊 Database Statistics:\n\n"
+        f"👥 Total Groups: {stats.get('groups', 0)}\n"
+        f"👤 Total Users: {stats.get('users', 0)}\n"
+        f"📋 Total Polls: {stats.get('polls', 0)}\n"
+        f"🏆 Total Scores: {stats.get('scores', 0)}\n"
+        f"💾 Total Records: {stats.get('total', 0)}"
+    )
+    try:
+        bot.send_message(message.chat.id, text, parse_mode="Markdown")
+    except Exception as e:
+        print("Failed to send dbstats reply:", e)
+
 # =====================================================================
 # 💾 🤖 AUTOMATIC USER TRACKER + DAILY TEXT LIMIT (Bot Admins Included)
 # =====================================================================
@@ -2191,63 +2252,6 @@ def track_and_save_users(bot_instance, message):
         except Exception as e:
             print(f"Error updating user tracker DB: {e}")
 
-# 📊 Database Statistics Command (Owner only)
-@bot.message_handler(commands=['dbstats'])
-def show_db_stats(message):
-    # Basic diagnostics for easier debugging
-    if OWNER_ID is None:
-        try:
-            bot.send_message(message.chat.id, "❌ OWNER_ID is not set in .env — dbstats is restricted to bot owner.")
-        except Exception:
-            pass
-        return
-
-    if message.from_user.id != OWNER_ID:
-        try:
-            bot.send_message(message.chat.id, "❌ This command is only for the bot owner.")
-        except Exception:
-            pass
-        return
-
-    # allow owner to run from private OR from SUPPORT_GROUP_ID (if set)
-    if message.chat.type != 'private' and (SUPPORT_GROUP_ID is None or message.chat.id != SUPPORT_GROUP_ID):
-        try:
-            bot.send_message(message.chat.id, "❌ Run this command in a private chat with the bot or from the configured SUPPORT_GROUP_ID.")
-        except Exception:
-            pass
-        return
-
-    try:
-        stats = database_stats(DB_FILE)
-    except Exception as e:
-        # in case database_stats raises, forward exception message
-        try:
-            bot.send_message(message.chat.id, f"❌ Exception while fetching DB stats: {e}")
-        except Exception:
-            pass
-        print(f"dbstats handler exception: {e}")
-        return
-
-    if not stats:
-        try:
-            bot.send_message(message.chat.id, "❌ Error fetching stats. Check bot logs for details.")
-        except Exception:
-            pass
-        return
-
-    text = (
-        f"📊 Database Statistics:\n\n"
-        f"👥 Total Groups: {stats.get('groups', 0)}\n"
-        f"👤 Total Users: {stats.get('users', 0)}\n"
-        f"📋 Total Polls: {stats.get('polls', 0)}\n"
-        f"🏆 Total Scores: {stats.get('scores', 0)}\n"
-        f"💾 Total Records: {stats.get('total', 0)}"
-    )
-    try:
-        bot.send_message(message.chat.id, text)
-    except Exception as e:
-        print(f"Failed to send dbstats reply: {e}")
-                                
 # ❤️‍🩹 थ्रेड्स स्टार्ट करें
 threading.Thread(target=global_poll_manager, daemon=True).start()
 threading.Thread(target=daily_leaderboard_scheduler, daemon=True).start()
