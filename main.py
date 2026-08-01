@@ -2194,31 +2194,59 @@ def track_and_save_users(bot_instance, message):
 # 📊 Database Statistics Command (Owner only)
 @bot.message_handler(commands=['dbstats'])
 def show_db_stats(message):
-    is_owner = (OWNER_ID and message.from_user.id == OWNER_ID)
-    is_valid_chat = (message.chat.type == 'private' or (SUPPORT_GROUP_ID and message.chat.id == SUPPORT_GROUP_ID))
-
-    if not (is_owner and is_valid_chat):
-        try: bot.send_message(message.chat.id, "❌ Only for bot owner!")
-        except Exception: pass
+    # Basic diagnostics for easier debugging
+    if OWNER_ID is None:
+        try:
+            bot.send_message(message.chat.id, "❌ OWNER_ID is not set in .env — dbstats is restricted to bot owner.")
+        except Exception:
+            pass
         return
-    
-    stats = database_stats(DB_FILE)
-    if stats:
-        text = (
-            f"📊 **Database Statistics:**\n\n"
-            f"👥 Total Groups: **{stats['groups']}**\n"
-            f"👤 Total Users: **{stats['users']}**\n"
-            f"📋 Total Polls: **{stats['polls']}**\n"
-            f"🏆 Total Scores: **{stats['scores']}**\n"
-            f"💾 Total Records: **{stats['total']}**"
-        )
-    else:
-        text = "❌ Error fetching stats"
-    
+
+    if message.from_user.id != OWNER_ID:
+        try:
+            bot.send_message(message.chat.id, "❌ This command is only for the bot owner.")
+        except Exception:
+            pass
+        return
+
+    # allow owner to run from private OR from SUPPORT_GROUP_ID (if set)
+    if message.chat.type != 'private' and (SUPPORT_GROUP_ID is None or message.chat.id != SUPPORT_GROUP_ID):
+        try:
+            bot.send_message(message.chat.id, "❌ Run this command in a private chat with the bot or from the configured SUPPORT_GROUP_ID.")
+        except Exception:
+            pass
+        return
+
     try:
-        bot.send_message(message.chat.id, text, parse_mode="Markdown")
+        stats = database_stats(DB_FILE)
     except Exception as e:
-        print(f"Error: {e}")
+        # in case database_stats raises, forward exception message
+        try:
+            bot.send_message(message.chat.id, f"❌ Exception while fetching DB stats: {e}")
+        except Exception:
+            pass
+        print(f"dbstats handler exception: {e}")
+        return
+
+    if not stats:
+        try:
+            bot.send_message(message.chat.id, "❌ Error fetching stats. Check bot logs for details.")
+        except Exception:
+            pass
+        return
+
+    text = (
+        f"📊 Database Statistics:\n\n"
+        f"👥 Total Groups: {stats.get('groups', 0)}\n"
+        f"👤 Total Users: {stats.get('users', 0)}\n"
+        f"📋 Total Polls: {stats.get('polls', 0)}\n"
+        f"🏆 Total Scores: {stats.get('scores', 0)}\n"
+        f"💾 Total Records: {stats.get('total', 0)}"
+    )
+    try:
+        bot.send_message(message.chat.id, text)
+    except Exception as e:
+        print(f"Failed to send dbstats reply: {e}")
                                 
 # ❤️‍🩹 थ्रेड्स स्टार्ट करें
 threading.Thread(target=global_poll_manager, daemon=True).start()
